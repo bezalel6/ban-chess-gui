@@ -262,6 +262,9 @@ export function ChessBoard() {
                 ? "Game Over"
                 : "Click on a piece to select, then click destination"}
             </p>
+            <p className="version-info">
+              Library v{BanChess.VERSION}
+            </p>
           </div>
         </div>
       </div>
