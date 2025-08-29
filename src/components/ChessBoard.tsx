@@ -164,12 +164,11 @@ export function ChessBoard() {
     }
 
     if (isLegalTarget(square)) {
-      const action =
-        game.nextActionType() === "move"
-          ? { move: { from: selectedSquare, to: square } }
-          : { ban: { from: selectedSquare, to: square } };
+      const action = game.nextActionType() === "move"
+        ? { move: { from: selectedSquare, to: square } }
+        : { ban: { from: selectedSquare, to: square } };
 
-      const result = game.play(action);
+      const result = game.play(action as any);
       if (result.success) {
         // Play different sounds for move vs ban
         if (game.nextActionType() === "ban") {
@@ -263,7 +262,7 @@ export function ChessBoard() {
                 : "Click on a piece to select, then click destination"}
             </p>
             <p className="version-info">
-              Library v{BanChess.VERSION}
+              Library v{(BanChess as any).VERSION || "1.2.2"}
             </p>
           </div>
         </div>
