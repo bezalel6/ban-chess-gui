@@ -52,6 +52,7 @@ export function ChessBoard() {
   const [boardSize, setBoardSize] = useState(4);
   const [showControls, setShowControls] = useState(true);
   const [currentTheme, setCurrentTheme] = useState("classic");
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     updateBoard();
@@ -268,44 +269,6 @@ export function ChessBoard() {
         </div>
       </div>
 
-      {/* Visual Controls */}
-      <div className="controls-section">
-        <button
-          className="btn btn-secondary controls-toggle"
-          onClick={() => setShowControls(!showControls)}
-        >
-          {showControls ? "🎨 Hide Controls" : "🎨 Show Controls"}
-        </button>
-
-        {showControls && (
-          <div className="controls-panel">
-            <div className="control-group">
-              <label className="control-label">
-                Board Size: {boardSize}rem
-              </label>
-              <input
-                type="range"
-                min="3"
-                max="8"
-                step="0.5"
-                value={boardSize}
-                onChange={(e) =>
-                  setBoardSize(parseFloat((e.target as any).value))
-                }
-                className="control-slider"
-              />
-            </div>
-
-            <div className="control-group">
-              <ThemeSlider
-                currentTheme={currentTheme}
-                onThemeChange={setCurrentTheme}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Game Info */}
       <div className="game-info">
         <div className="turn-indicator">
@@ -419,6 +382,50 @@ export function ChessBoard() {
         >
           Auto-flip: {autoFlip ? "ON" : "OFF"}
         </button>
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className="btn"
+        >
+          Debug: {showDebug ? "ON" : "OFF"}
+        </button>
+      </div>
+
+      {/* Visual Controls */}
+      <div className="controls-section">
+        <button
+          className="btn btn-secondary controls-toggle"
+          onClick={() => setShowControls(!showControls)}
+        >
+          {showControls ? "🎨 Hide Controls" : "🎨 Show Controls"}
+        </button>
+
+        {showControls && (
+          <div className="controls-panel">
+            <div className="control-group">
+              <label className="control-label">
+                Board Size: {boardSize}rem
+              </label>
+              <input
+                type="range"
+                min="3"
+                max="8"
+                step="0.5"
+                value={boardSize}
+                onChange={(e) =>
+                  setBoardSize(parseFloat((e.target as any).value))
+                }
+                className="control-slider"
+              />
+            </div>
+
+            <div className="control-group">
+              <ThemeSlider
+                currentTheme={currentTheme}
+                onThemeChange={setCurrentTheme}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Move History */}
@@ -426,21 +433,40 @@ export function ChessBoard() {
         <h3 className="history-title">Move History</h3>
         <div className="move-history">
           {moveHistory.length > 0 ? (
-            moveHistory.map((entry, i) => (
-              <div
-                key={i}
-                className={`move-entry ${
-                  entry.startsWith("🚫") ? "ban-entry" : ""
-                }`}
-              >
-                {i + 1}. {entry}
-              </div>
-            ))
+            <div className="moves-inline">
+              {moveHistory.map((entry, i) => (
+                <span
+                  key={i}
+                  className={`move-entry-inline ${
+                    entry.startsWith("🚫") ? "ban-entry" : ""
+                  }`}
+                >
+                  {Math.floor(i / 2) + 1}.{i % 2 === 0 ? "" : ".."} {entry}
+                </span>
+              ))}
+            </div>
           ) : (
             <div className="move-entry">No moves yet</div>
           )}
         </div>
       </div>
+
+      {/* Debug View */}
+      {showDebug && (
+        <div className="debug-section">
+          <h3 className="debug-title">Debug Information</h3>
+          <div className="debug-content">
+            <div className="debug-group">
+              <label className="debug-label">FEN:</label>
+              <code className="debug-value">{game.fen()}</code>
+            </div>
+            <div className="debug-group">
+              <label className="debug-label">PGN:</label>
+              <code className="debug-value">{game.pgn()}</code>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Game Over Message */}
       {game.gameOver() && (
