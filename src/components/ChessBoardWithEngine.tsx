@@ -84,7 +84,7 @@ export function ChessBoardWithEngine() {
   const engine = useEngine({
     depth: engineConfig.depth,
     timeLimit: engineConfig.timeLimit,
-    useOpeningBook: true
+    multiPV: 1
   });
 
   useEffect(() => {
@@ -262,18 +262,38 @@ export function ChessBoardWithEngine() {
   };
   
   // Handle engine moves
-  const handleEngineMove = (action: Action) => {
+  // Convert UCI move to Action format
+  const uciToAction = (uci: string): Action | null => {
+    if (!uci || uci.length < 4) return null;
+    
+    try {
+      const from = uci.substring(0, 2) as any;
+      const to = uci.substring(2, 4) as any;
+      const promotion = uci.length > 4 ? uci[4] as 'q' | 'r' | 'b' | 'n' : undefined;
+      
+      // For now, assume all UCI moves from Stockfish are regular moves (not bans)
+      // In a more sophisticated system, we'd need context about the current game state
+      return { move: { from, to, promotion } };
+    } catch {
+      return null;
+    }
+  };
+
+  const handleEngineMove = (uciMove: string) => {
     if (!isEngineTurn()) return;
     
-    setTimeout(() => {
-      playAction(action);
-      
-      // For engine vs engine, trigger next move
-      if (engineConfig.mode === 'both' && engineConfig.autoPlay && !game.gameOver()) {
-        // Continue playing
-        forceUpdate({});
-      }
-    }, 500); // Small delay to make it visible
+    const action = uciToAction(uciMove);
+    if (action) {
+      setTimeout(() => {
+        playAction(action);
+        
+        // For engine vs engine, trigger next move
+        if (engineConfig.mode === 'both' && engineConfig.autoPlay && !game.gameOver()) {
+          // Continue playing
+          forceUpdate({});
+        }
+      }, 500); // Small delay to make it visible
+    }
   };
   
   // Engine auto-play effect

@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import type { Action } from 'ban-chess.ts';
+import { StockfishManager } from '../components/MultiEngineManager';
+import type { StockfishConfig, EngineEvent } from '../components/MultiEngineManager';
 
 export interface EngineConfig {
   depth?: number;
   timeLimit?: number;
-  useOpeningBook?: boolean;
+  multiPV?: number;
   autoPlay?: boolean;
   playAs?: 'white' | 'black' | 'both' | 'none';
 }
@@ -12,19 +13,22 @@ export interface EngineConfig {
 export interface EngineState {
   isReady: boolean;
   isThinking: boolean;
-  bestMove: Action | null;
+  bestMove: string | null;
   evaluation: number;
   depth: number;
   nodes: number;
-  pv: Action[];
-  analysis: {
+  nps?: number;
+  pv: string[];
+  mate?: number;
+  // Legacy compatibility fields - no longer populated
+  analysis?: {
     material: number;
     mobility: number;
     kingBanSafety: number;
     centerControl: number;
     totalScore: number;
   } | null;
-  ttStats: {
+  ttStats?: {
     size: number;
     hits: number;
     hitRate: number;
@@ -39,128 +43,129 @@ export function useEngine(config: EngineConfig = {}) {
     evaluation: 0,
     depth: 0,
     nodes: 0,
+    nps: 0,
     pv: [],
     analysis: null,
     ttStats: null
   });
   
-  const workerRef = useRef<Worker | null>(null);
+  const engineRef = useRef<StockfishManager | null>(null);
   const configRef = useRef(config);
   
   useEffect(() => {
-    // Create worker
-    const worker = new Worker(
-      new URL('../engine/engineWorker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    // Create Stockfish manager
+    const stockfishConfig: StockfishConfig = {
+      multiPV: config.multiPV || 1,
+      depth: config.depth || 20,
+      timeLimit: config.timeLimit || 3000
+    };
     
-    // Set up message handler
-    worker.onmessage = (e: MessageEvent) => {
-      const { type, ...data } = e.data;
-      
-      switch (type) {
-        case 'READY':
+    const manager = new StockfishManager(stockfishConfig);
+    
+    // Set up event handler
+    const unsubscribe = manager.onEvent((event: EngineEvent) => {
+      switch (event.type) {
+        case 'ready':
           setState(prev => ({ ...prev, isReady: true }));
           break;
           
-        case 'SEARCH_UPDATE':
-          // Live updates during search
+        case 'evaluation':
           setState(prev => ({
             ...prev,
             isThinking: true,
-            evaluation: data.evaluation,
-            depth: data.depth,
-            nodes: data.nodes,
-            pv: data.pv || []
+            evaluation: event.evaluation.score,
+            depth: event.evaluation.depth,
+            nodes: event.evaluation.nodes,
+            nps: event.evaluation.nps,
+            pv: event.evaluation.pv,
+            mate: event.evaluation.mate
           }));
           break;
           
-        case 'BEST_MOVE':
+        case 'bestMove':
           setState(prev => ({
             ...prev,
             isThinking: false,
-            bestMove: data.move,
-            evaluation: data.evaluation,
-            depth: data.depth,
-            nodes: data.nodes,
-            pv: data.pv || []
+            bestMove: event.move
           }));
           break;
           
-        case 'ANALYSIS':
-          setState(prev => ({
-            ...prev,
-            analysis: data.analysis
-          }));
-          break;
-          
-        case 'TT_STATS':
-          setState(prev => ({
-            ...prev,
-            ttStats: data.stats
-          }));
-          break;
-          
-        case 'ERROR':
-          console.error('Engine error:', data.error);
+        case 'error':
+          console.error('Stockfish error:', event.error);
           setState(prev => ({ ...prev, isThinking: false }));
           break;
       }
-    };
-    
-    // Initialize engine
-    worker.postMessage({
-      type: 'INIT',
-      payload: {
-        depth: config.depth || 6,
-        timeLimit: config.timeLimit || 3000,
-        useOpeningBook: config.useOpeningBook !== false
-      }
     });
     
-    workerRef.current = worker;
+    // Initialize manager
+    manager.initialize().catch(error => {
+      console.error('Failed to initialize Stockfish:', error);
+    });
+    
+    engineRef.current = manager;
     
     // Cleanup
     return () => {
-      worker.terminate();
+      unsubscribe();
+      manager.dispose();
     };
   }, []);
   
   const findBestMove = (fen: string, timeLimit?: number) => {
-    if (!workerRef.current || !state.isReady) return;
+    if (!engineRef.current || !state.isReady) return;
     
     setState(prev => ({ ...prev, isThinking: true }));
     
-    workerRef.current.postMessage({
-      type: 'FIND_BEST_MOVE',
-      payload: {
-        fen,
-        timeLimit: timeLimit || configRef.current.timeLimit || 3000
-      }
-    });
+    // Update time limit if provided
+    if (timeLimit && timeLimit !== configRef.current.timeLimit) {
+      engineRef.current.updateConfig({ timeLimit });
+      configRef.current = { ...configRef.current, timeLimit };
+    }
+    
+    engineRef.current.findBestMove(fen);
   };
   
   const analyzePosition = (fen: string) => {
-    if (!workerRef.current || !state.isReady) return;
+    if (!engineRef.current || !state.isReady) return;
     
-    workerRef.current.postMessage({
-      type: 'ANALYZE_POSITION',
-      payload: { fen }
-    });
+    engineRef.current.analyzePosition(fen);
   };
   
+  const stop = () => {
+    if (!engineRef.current) return;
+    
+    engineRef.current.stop();
+    setState(prev => ({ ...prev, isThinking: false }));
+  };
+  
+  const updateConfig = (updates: Partial<EngineConfig>) => {
+    if (!engineRef.current) return;
+    
+    const newConfig = { ...configRef.current, ...updates };
+    configRef.current = newConfig;
+    
+    // Convert to Stockfish config
+    const stockfishUpdates: Partial<StockfishConfig> = {};
+    if (updates.depth !== undefined) stockfishUpdates.depth = updates.depth;
+    if (updates.timeLimit !== undefined) stockfishUpdates.timeLimit = updates.timeLimit;
+    if (updates.multiPV !== undefined) stockfishUpdates.multiPV = updates.multiPV;
+    
+    engineRef.current.updateConfig(stockfishUpdates);
+  };
+  
+  // Legacy getStats method for compatibility
   const getStats = () => {
-    if (!workerRef.current || !state.isReady) return;
-    
-    workerRef.current.postMessage({
-      type: 'GET_TT_STATS'
-    });
+    // Stockfish doesn't expose TT stats in the same way
+    // This is a stub for backward compatibility
+    console.warn('getStats() is not available with Stockfish engine');
   };
-  
+
   return {
     ...state,
     findBestMove,
     analyzePosition,
+    stop,
+    updateConfig,
     getStats,
     config: configRef.current
   };
