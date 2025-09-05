@@ -6,12 +6,12 @@
   "description": "Interactive GUI for the Ban Chess variant",
   "scripts": {
     "dev": "vite --host",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && cp -r public/stockfish dist/",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
-    "ban-chess.ts": "^3.1.1",
+    "ban-chess.ts": "^3.1.2",
     "preact": "^10.27.0",
     "stockfish.js": "^10.0.2"
   },
