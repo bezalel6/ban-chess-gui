@@ -3,6 +3,7 @@ import { BanChess } from "ban-chess.ts";
 import type { Move, Action } from "ban-chess.ts";
 import { ThemeSlider, THEMES } from "./ThemeSlider";
 import { EnginePanel } from "./EnginePanel";
+import { EngineSettings, type EngineConfig } from "./EngineSettings";
 import { useEngine } from "../hooks/useEngine";
 import "../styles/engine.css";
 
@@ -36,8 +37,6 @@ function playSound(frequency: number, duration: number = 100) {
   }
 }
 
-type EngineMode = 'off' | 'white' | 'black' | 'analysis';
-
 export function ChessBoardWithEngine() {
   const [game] = useState(() => new BanChess());
   const [board, setBoard] = useState<(string | null)[][]>([]);
@@ -51,19 +50,40 @@ export function ChessBoardWithEngine() {
   const [, forceUpdate] = useState({});
 
   // Visual customization states
-  const [boardSize, setBoardSize] = useState(4);
+  const [boardSize, setBoardSize] = useState(() => {
+    const saved = localStorage.getItem('boardSize');
+    return saved ? parseInt(saved) : 4;
+  });
   const [showControls, setShowControls] = useState(true);
-  const [currentTheme, setCurrentTheme] = useState("classic");
+  const [currentTheme, setCurrentTheme] = useState(() => {
+    return localStorage.getItem('theme') || "classic";
+  });
   const [showDebug, setShowDebug] = useState(false);
   
-  // Engine states
-  const [engineMode, setEngineMode] = useState<EngineMode>('off');
-  const [showEnginePanel, setShowEnginePanel] = useState(false);
+  // Engine configuration
+  const [engineConfig, setEngineConfig] = useState<EngineConfig>(() => {
+    const saved = localStorage.getItem('engineConfig');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // Fallback to defaults
+      }
+    }
+    return {
+      mode: 'off',
+      depth: 6,
+      timeLimit: 3000,
+      version: 'v2',
+      autoPlay: true,
+      showEvaluation: true
+    };
+  });
   
-  // Initialize engine
+  // Initialize engine with dynamic config
   const engine = useEngine({
-    depth: 6,
-    timeLimit: 3000,
+    depth: engineConfig.depth,
+    timeLimit: engineConfig.timeLimit,
     useOpeningBook: true
   });
 
@@ -100,7 +120,13 @@ export function ChessBoardWithEngine() {
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--board-size", `${boardSize}rem`);
+    localStorage.setItem('boardSize', boardSize.toString());
   }, [boardSize]);
+
+  // Save theme to localStorage
+  useEffect(() => {
+    localStorage.setItem('theme', currentTheme);
+  }, [currentTheme]);
 
   const updateBoard = () => {
     const fen = game.fen().split(" ")[0];
@@ -161,9 +187,12 @@ export function ChessBoardWithEngine() {
   
   // Check if it's engine's turn
   const isEngineTurn = () => {
-    if (engineMode === 'off' || engineMode === 'analysis') return false;
-    if (engineMode === 'white' && game.turn === 'white') return true;
-    if (engineMode === 'black' && game.turn === 'black') return true;
+    const mode = engineConfig.mode;
+    if (mode === 'off' || mode === 'analysis') return false;
+    if (mode === 'both') return true; // Both engines play
+    const activePlayer = game.getActivePlayer();
+    if (mode === 'white' && activePlayer === 'white') return true;
+    if (mode === 'black' && activePlayer === 'black') return true;
     return false;
   };
 
@@ -238,8 +267,31 @@ export function ChessBoardWithEngine() {
     
     setTimeout(() => {
       playAction(action);
+      
+      // For engine vs engine, trigger next move
+      if (engineConfig.mode === 'both' && engineConfig.autoPlay && !game.gameOver()) {
+        // Continue playing
+        forceUpdate({});
+      }
     }, 500); // Small delay to make it visible
   };
+  
+  // Engine auto-play effect
+  useEffect(() => {
+    if (!engine.isReady || engine.isThinking || !engineConfig.autoPlay) return;
+    if (!isEngineTurn() || game.gameOver()) return;
+    
+    // Request engine move
+    const fen = game.fen();
+    engine.findBestMove(fen, engineConfig.timeLimit);
+  }, [engine.isReady, engine.isThinking, engineConfig.mode, engineConfig.autoPlay, game, board]);
+  
+  // Handle engine move results
+  useEffect(() => {
+    if (engine.bestMove && isEngineTurn()) {
+      handleEngineMove(engine.bestMove);
+    }
+  }, [engine.bestMove]);
 
   const getPieceAtSquare = (displayRank: number, displayFile: number) => {
     if (!flipped) {
@@ -311,33 +363,16 @@ export function ChessBoardWithEngine() {
         </div>
       </div>
 
-      {/* Engine Mode Selector */}
-      <div className="engine-mode-selector">
-        <button 
-          className={`engine-mode-btn ${engineMode === 'off' ? 'active' : ''}`}
-          onClick={() => { setEngineMode('off'); setShowEnginePanel(false); }}
-        >
-          Human vs Human
-        </button>
-        <button 
-          className={`engine-mode-btn ${engineMode === 'white' ? 'active' : ''}`}
-          onClick={() => { setEngineMode('white'); setShowEnginePanel(true); }}
-        >
-          Engine as White
-        </button>
-        <button 
-          className={`engine-mode-btn ${engineMode === 'black' ? 'active' : ''}`}
-          onClick={() => { setEngineMode('black'); setShowEnginePanel(true); }}
-        >
-          Engine as Black
-        </button>
-        <button 
-          className={`engine-mode-btn ${engineMode === 'analysis' ? 'active' : ''}`}
-          onClick={() => { setEngineMode('analysis'); setShowEnginePanel(true); }}
-        >
-          Analysis Mode
-        </button>
-      </div>
+      {/* Engine Settings */}
+      <EngineSettings 
+        config={engineConfig}
+        onConfigChange={(updates) => {
+          const newConfig = { ...engineConfig, ...updates };
+          setEngineConfig(newConfig);
+          localStorage.setItem('engineConfig', JSON.stringify(newConfig));
+        }}
+        isPlaying={engine.isThinking}
+      />
 
       {/* Game Info */}
       <div className="game-info">
@@ -440,7 +475,7 @@ export function ChessBoardWithEngine() {
       </div>
       
       {/* Engine Panel */}
-      {showEnginePanel && (
+      {engineConfig.showEvaluation && engineConfig.mode !== 'off' && (
         <EnginePanel 
           engine={engine}
           fen={game.fen()}

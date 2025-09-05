@@ -64,7 +64,10 @@ self.onmessage = async (e: MessageEvent) => {
           
           if (searchResult.pv.length > 0) {
             bestAction = searchResult.pv[0];
-            bestScore = 0; // V2 engine doesn't expose score in search result
+            // Get evaluation by running static eval on the position
+            const tempGame = new BanChess(payload.fen);
+            tempGame.play(bestAction);
+            bestScore = engineV2.evaluatePosition(tempGame) * (game.getActivePlayer() === 'white' ? 1 : -1);
             totalNodes = searchResult.nodes;
             
             // Send progressive update
