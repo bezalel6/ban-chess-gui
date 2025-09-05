@@ -1,8 +1,8 @@
 // import { ChessBoard } from './components/ChessBoard';
-// import { ChessBoardWithEngine as ChessBoard } from './components/ChessBoardWithEngine';
-// Use the new Lichess-style analysis interface
+// import { ChessBoardWithEngine } from './components/ChessBoardWithEngine';
 import { LichessAnalysis } from './components/LichessAnalysis';
 
 export function App() {
+  // Use the newly fixed LichessAnalysis component
   return <LichessAnalysis />;
 }

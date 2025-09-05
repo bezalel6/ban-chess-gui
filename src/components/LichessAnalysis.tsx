@@ -6,7 +6,7 @@ import { StockfishManager } from "./MultiEngineManager";
 import type { EngineLine } from "./MultiEngineManager";
 import "../styles/lichess.css";
 
-const BASE_PATH = import.meta.env.BASE_URL;
+const BASE_PATH = import.meta.env.BASE_URL || '/';
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 // Simple audio using Web Audio API
@@ -131,7 +131,7 @@ export function LichessAnalysis() {
     if (!pieceName) return null;
 
     // Use a default/classic piece set for Lichess style
-    const imagePath = `${BASE_PATH}pieces/classic/${
+    const imagePath = `${BASE_PATH}themes/classic/${
       isWhite ? "white" : "black"
     }/${pieceName}.png`;
     
@@ -271,6 +271,10 @@ export function LichessAnalysis() {
           objectFit: 'contain',
           userSelect: 'none',
           pointerEvents: 'none'
+        }}
+        onError={(e) => {
+          console.warn('Failed to load piece image:', imageSrc);
+          (e.target as HTMLImageElement).style.display = 'none';
         }}
       />
     );
