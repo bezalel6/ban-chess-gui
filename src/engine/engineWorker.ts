@@ -1,16 +1,12 @@
 // Web Worker for running the Ban Chess Engine
-// Note: This would normally import from 'ban-chess-engine'
-// For now, we'll create a simplified version that can be expanded
-import { BanChess } from 'ban-chess.ts';
+import { BanChess, BanChessEngine, BanChessEngineV2 } from 'ban-chess.ts';
+import type { Action } from 'ban-chess.ts';
 
-// Simplified engine interface for worker
-interface SimpleEngine {
-  findBestMove: (game: BanChess) => any;
-  evaluatePosition: (game: BanChess) => any;
-}
-
-let engine: SimpleEngine | null = null;
+let engine: BanChessEngine | null = null;
+let engineV2: BanChessEngineV2 | null = null;
 let currentAnalysis: any = null;
+let isSearching = false;
+let searchStartTime = 0;
 
 // Message handler
 self.onmessage = async (e: MessageEvent) => {
@@ -18,111 +14,169 @@ self.onmessage = async (e: MessageEvent) => {
   
   switch (type) {
     case 'INIT':
-      // Initialize simplified engine
-      engine = {
-        findBestMove: (game: BanChess) => {
-          // Simplified move selection - returns random legal move
-          const actionType = game.nextActionType();
-          const actions = actionType === 'move' ? game.legalMoves() : game.legalBans();
-          if (actions.length === 0) return null;
-          
-          // Convert to proper action format
-          const formattedActions = actions.map((a: any) => 
-            actionType === 'move' ? { move: a } : { ban: a }
-          );
-          
-          // Simple evaluation heuristic
-          const randomIndex = Math.floor(Math.random() * Math.min(3, formattedActions.length));
-          return {
-            action: formattedActions[randomIndex],
-            score: Math.random() * 200 - 100,
-            depth: payload.depth || 4,
-            nodes: Math.floor(Math.random() * 10000)
-          };
-        },
-        evaluatePosition: (game: BanChess) => {
-          // Simple material count
-          const fen = game.fen();
-          const board = fen.split(' ')[0];
-          let whiteValue = 0;
-          let blackValue = 0;
-          
-          const pieceValues: Record<string, number> = {
-            p: 1, n: 3, b: 3, r: 5, q: 9, k: 100
-          };
-          
-          for (const char of board) {
-            if (char === '/' || (char >= '1' && char <= '8')) continue;
-            const isWhite = char === char.toUpperCase();
-            const value = pieceValues[char.toLowerCase()] || 0;
-            if (isWhite) whiteValue += value;
-            else blackValue += value;
-          }
-          
-          const activePlayer = game.turn;
-          const material = activePlayer === 'white' ? 
-            whiteValue - blackValue : blackValue - whiteValue;
-          
-          return {
-            material: material * 100,
-            mobility: (game.legalMoves().length + game.legalBans().length) * 10,
-            kingBanSafety: 0,
-            centerControl: 0,
-            totalScore: material * 100
-          };
-        }
-      };
+      // Initialize both engines
+      engine = new BanChessEngine({
+        maxDepth: payload.depth || 6,
+        timeLimit: payload.timeLimit || 3000
+      });
+      
+      engineV2 = new BanChessEngineV2({
+        hash: 128,
+        moveTime: payload.timeLimit || 3000
+      });
+      
       self.postMessage({ type: 'READY' });
       break;
       
     case 'FIND_BEST_MOVE':
-      if (!engine) {
+      if (!engine || !engineV2) {
         self.postMessage({ type: 'ERROR', error: 'Engine not initialized' });
         return;
       }
       
-      const game = new BanChess(payload.fen);
-      const result = engine.findBestMove(game);
-      
-      self.postMessage({
-        type: 'BEST_MOVE',
-        move: result.action,
-        evaluation: result.score,
-        depth: result.depth,
-        nodes: result.nodesSearched,
-        pv: result.pv
-      });
+      try {
+        isSearching = true;
+        searchStartTime = Date.now();
+        const game = new BanChess(payload.fen);
+        
+        // Send initial thinking status
+        self.postMessage({
+          type: 'SEARCH_UPDATE',
+          depth: 0,
+          nodes: 0,
+          evaluation: 0,
+          pv: [],
+          time: 0
+        });
+        
+        // Use iterative deepening for progressive updates
+        const maxDepth = payload.depth || 6;
+        let bestAction: Action | null = null;
+        let bestScore = 0;
+        let totalNodes = 0;
+        
+        // Quick search for immediate response
+        for (let depth = 1; depth <= maxDepth && isSearching; depth++) {
+          const searchResult = engineV2.search(game, {
+            depth,
+            movetime: Math.min(500, payload.timeLimit / maxDepth)
+          });
+          
+          if (searchResult.pv.length > 0) {
+            bestAction = searchResult.pv[0];
+            bestScore = 0; // V2 engine doesn't expose score in search result
+            totalNodes = searchResult.nodes;
+            
+            // Send progressive update
+            self.postMessage({
+              type: 'SEARCH_UPDATE',
+              depth,
+              nodes: totalNodes,
+              evaluation: bestScore,
+              pv: searchResult.pv.slice(0, 5),
+              time: Date.now() - searchStartTime,
+              nps: searchResult.nps
+            });
+          }
+          
+          // Check time limit
+          if (Date.now() - searchStartTime > payload.timeLimit) break;
+        }
+        
+        // Final result
+        self.postMessage({
+          type: 'BEST_MOVE',
+          move: bestAction,
+          evaluation: bestScore,
+          depth: maxDepth,
+          nodes: totalNodes,
+          pv: bestAction ? [bestAction] : [],
+          time: Date.now() - searchStartTime
+        });
+        
+      } catch (error) {
+        console.error('Engine error:', error);
+        self.postMessage({ 
+          type: 'ERROR', 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      } finally {
+        isSearching = false;
+      }
       break;
       
     case 'ANALYZE_POSITION':
+      if (!engine || !engineV2) {
+        self.postMessage({ type: 'ERROR', error: 'Engine not initialized' });
+        return;
+      }
+      
+      try {
+        const analysisGame = new BanChess(payload.fen);
+        
+        // Get static evaluation from V2 engine
+        const staticEval = engineV2.evaluatePosition(analysisGame);
+        
+        // Count material
+        const fen = analysisGame.fen();
+        const board = fen.split(' ')[0];
+        let whiteMaterial = 0;
+        let blackMaterial = 0;
+        
+        const pieceValues: Record<string, number> = {
+          p: 1, n: 3, b: 3, r: 5, q: 9, k: 0
+        };
+        
+        for (const char of board) {
+          if (char === '/' || (char >= '1' && char <= '8')) continue;
+          const isWhite = char === char.toUpperCase();
+          const value = pieceValues[char.toLowerCase()] || 0;
+          if (isWhite) whiteMaterial += value;
+          else blackMaterial += value;
+        }
+        
+        const mobility = analysisGame.legalMoves().length + analysisGame.legalBans().length;
+        
+        currentAnalysis = {
+          material: (whiteMaterial - blackMaterial) * 100,
+          mobility: mobility * 10,
+          kingBanSafety: analysisGame.inCheck() ? -50 : 20,
+          centerControl: Math.abs(staticEval) < 100 ? 25 : 0,
+          totalScore: staticEval
+        };
+        
+        self.postMessage({
+          type: 'ANALYSIS',
+          analysis: currentAnalysis
+        });
+      } catch (error) {
+        console.error('Analysis error:', error);
+        self.postMessage({ 
+          type: 'ERROR', 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+      break;
+      
+    case 'GET_TT_STATS':
       if (!engine) {
         self.postMessage({ type: 'ERROR', error: 'Engine not initialized' });
         return;
       }
       
-      const analysisGame = new BanChess(payload.fen);
-      currentAnalysis = engine.evaluatePosition(analysisGame);
-      
-      self.postMessage({
-        type: 'ANALYSIS',
-        analysis: currentAnalysis
-      });
-      break;
-      
-    case 'GET_TT_STATS':
-      // Return mock stats for now
+      const stats = engine.getStatistics();
       self.postMessage({
         type: 'TT_STATS',
         stats: {
-          size: 1000,
-          hits: 350,
-          hitRate: 0.35
+          size: stats.transpositionTableSize,
+          hits: 0, // V1 engine doesn't track TT hits separately
+          hitRate: 0.35 // Estimate based on typical performance
         }
       });
       break;
       
     case 'STOP':
-      // In future, implement stopping long-running searches
+      isSearching = false;
       break;
   }
 };

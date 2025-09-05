@@ -53,7 +53,14 @@ export function EnginePanel({ engine, fen, isEngineMove, onEngineMove }: EngineP
     <div className="engine-panel">
       <h3 className="engine-title">
         🤖 Ban Chess Engine
-        {engine.isThinking && <span className="thinking-indicator"> (thinking...)</span>}
+        {engine.isThinking && (
+          <span className="thinking-indicator">
+            <span className="thinking-dots">
+              <span>.</span><span>.</span><span>.</span>
+            </span>
+            Depth {engine.depth}
+          </span>
+        )}
       </h3>
       
       {/* Evaluation Bar */}

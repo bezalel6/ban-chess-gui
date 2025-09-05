@@ -20,7 +20,36 @@
 .thinking-indicator {
   color: var(--color-primary);
   font-size: 0.9em;
-  animation: pulse 1.5s infinite;
+  margin-left: 1rem;
+}
+
+.thinking-dots {
+  display: inline-block;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-right: 0.5rem;
+}
+
+.thinking-dots span {
+  animation: blink 1.4s infinite;
+  animation-fill-mode: both;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+  0%, 60%, 100% {
+    opacity: 0.2;
+  }
+  30% {
+    opacity: 1;
+  }
 }
 
 @keyframes pulse {
@@ -47,9 +76,9 @@
   top: 0;
   left: 0;
   height: 100%;
-  background: linear-gradient(to right, #000 0%, #888 50%, #fff 100%);
-  transition: width 0.3s ease;
-  opacity: 0.7;
+  background: linear-gradient(to right, #000 0%, #444 40%, #888 50%, #bbb 60%, #fff 100%);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.8;
 }
 
 .eval-score {
@@ -85,6 +114,14 @@
   border-radius: 4px;
   flex: 1;
   min-width: 100px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.stat:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .stat-label {
@@ -165,6 +202,21 @@
   background: var(--bg-secondary);
   border-radius: 4px;
   color: var(--text-primary);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.pv-move:hover {
+  background: var(--bg-hover);
+  border-color: var(--color-primary);
+  transform: scale(1.05);
+}
+
+.pv-move:first-child {
+  background: var(--color-primary);
+  color: white;
+  font-weight: bold;
 }
 
 /* Engine Mode Selector */

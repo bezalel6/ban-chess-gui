@@ -63,6 +63,18 @@ export function useEngine(config: EngineConfig = {}) {
           setState(prev => ({ ...prev, isReady: true }));
           break;
           
+        case 'SEARCH_UPDATE':
+          // Live updates during search
+          setState(prev => ({
+            ...prev,
+            isThinking: true,
+            evaluation: data.evaluation,
+            depth: data.depth,
+            nodes: data.nodes,
+            pv: data.pv || []
+          }));
+          break;
+          
         case 'BEST_MOVE':
           setState(prev => ({
             ...prev,
