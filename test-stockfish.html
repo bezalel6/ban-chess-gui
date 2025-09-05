@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stockfish.js Test</title>
+</head>
+<body>
+    <h1>Stockfish.js Test</h1>
+    <div id="output" style="white-space: pre; font-family: monospace; background: #f0f0f0; padding: 10px; height: 400px; overflow-y: auto;"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(msg) {
+            output.textContent += msg + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        log('Starting Stockfish.js test...');
+        
+        // Detect WebAssembly support
+        const wasmSupported = typeof WebAssembly === 'object' && 
+            WebAssembly.validate(Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00));
+        
+        log('WebAssembly supported: ' + wasmSupported);
+        
+        // Load Stockfish as a Worker
+        const stockfishPath = wasmSupported 
+            ? '/stockfish/stockfish.wasm.js' 
+            : '/stockfish/stockfish.js';
+            
+        log('Loading Stockfish from: ' + stockfishPath);
+        
+        try {
+            const stockfish = new Worker(stockfishPath);
+            
+            stockfish.addEventListener('message', function(e) {
+                log('Stockfish: ' + e.data);
+                
+                // Handle UCI protocol
+                if (e.data === 'uciok') {
+                    log('>>> Sending: isready');
+                    stockfish.postMessage('isready');
+                } else if (e.data === 'readyok') {
+                    log('>>> Stockfish is ready!');
+                    log('>>> Setting position');
+                    stockfish.postMessage('position startpos');
+                    log('>>> Starting analysis');
+                    stockfish.postMessage('go depth 10');
+                } else if (e.data.startsWith('bestmove')) {
+                    log('>>> Analysis complete!');
+                }
+            });
+            
+            stockfish.addEventListener('error', function(e) {
+                log('ERROR: ' + e.message);
+            });
+            
+            log('>>> Sending: uci');
+            stockfish.postMessage('uci');
+            
+        } catch (error) {
+            log('Failed to create Worker: ' + error.message);
+        }
+    </script>
+</body>
+</html>
