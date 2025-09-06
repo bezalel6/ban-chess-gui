@@ -11,7 +11,7 @@
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
-    "ban-chess.ts": "^3.1.2",
+    "ban-chess.ts": "^4.0.0",
     "preact": "^10.27.0",
     "stockfish.js": "^10.0.2"
   },
