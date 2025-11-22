@@ -164,9 +164,10 @@ export function ChessBoard() {
     }
 
     if (isLegalTarget(square)) {
-      const action = game.nextActionType() === "move"
-        ? { move: { from: selectedSquare, to: square } }
-        : { ban: { from: selectedSquare, to: square } };
+      const action =
+        game.nextActionType() === "move"
+          ? { move: { from: selectedSquare, to: square } }
+          : { ban: { from: selectedSquare, to: square } };
 
       const result = game.play(action as any);
       if (result.success) {
@@ -256,13 +257,9 @@ export function ChessBoard() {
           />
           <div className="header-text">
             <h1 className="page-title">Ban Chess</h1>
-            <p className="subtitle">
-              {game.gameOver()
-                ? "Game Over"
-                : "Click on a piece to select, then click destination"}
-            </p>
-            <p className="version-info">
-              Library v{(BanChess as any).VERSION || "1.2.2"}
+            <p className="subtitle">{game.gameOver() ? "Game Over" : ""}</p>
+            <p className="fw-version">
+              ban-chess.ts v{(BanChess as any).VERSION || "1.2.2"}
             </p>
           </div>
         </div>

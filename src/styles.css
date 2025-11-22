@@ -574,3 +574,12 @@ body {
   border-radius: 4px;
   border: none;
 }
+
+
+.fw-version {
+  font-style: italic;
+  font-size: 0.9rem;
+  color: #777;
+  letter-spacing: 0.3px;
+  opacity: 0.85;
+}
